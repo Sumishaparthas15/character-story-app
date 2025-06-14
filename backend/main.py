@@ -1,27 +1,31 @@
-from fastapi import FastAPI,HTTPException
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import os
 from supabase import create_client
 from fastapi.middleware.cors import CORSMiddleware
+from groq import Groq  
+
 
 load_dotenv()
+
 app = FastAPI()
+
+
 supabase_url = os.getenv("SUPABASE_URL")
 supabase_key = os.getenv("SUPABASE_KEY")
-open_api_key = os.getenv("OPENAI_API_KEY")
-
-
 supabase = create_client(supabase_url, supabase_key)
 
-origins = [
-    "http://localhost:3000",  
-    
-]
 
+print("Loaded GROQ API Key:", os.getenv("GROQ_API_KEY"))  
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+
+
+origins = ["http://localhost:3000"] 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -29,47 +33,45 @@ app.add_middleware(
 
 
 class Character(BaseModel):
-    name:str
-    details:str
+    name: str
+    details: str
 
-@app.post("/api/create_character")  
-def create_character(characters:Character):
-    print(characters.name,".......................")
+
+@app.post("/api/create_character")
+def create_character(characters: Character):
     try:
-          respose = supabase.table("characters").insert({
-               "name":characters.name,
-               "details":characters.details
-          }).execute()
-          return {"message":"charcter addedd successfully","data":respose.data}
+        response = supabase.table("characters").insert({
+            "name": characters.name,
+            "details": characters.details
+        }).execute()
+        return {"message": "Character added successfully", "data": response.data}
     except Exception as e:
-        print("Error occurred:", e)
-        raise HTTPException(status_code=500,detail=str(e))
-    
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/generate_story")    
-def generate_story(payload:dict):
-    print(payload,"................................")
+@app.post("/api/generate_story")
+def generate_story(payload: dict):
     try:
-        name = payload.get("charcter_name")
-        character_data = supabase.table("characters").select("*").eq("name",name).single().execute()
+        name = payload.get("charcter_name")  
+        character_data = supabase.table("characters").select("*").eq("name", name).single().execute()
 
-        if not character_data:
-            raise HTTPException(status_code=404,detail="Character not found")    
-        
-        prompt = f"Write a 5-line short story about this character: {character_data.data['details']}"
+        if not character_data.data:
+            raise HTTPException(status_code=404, detail="Character not found")
 
-        from openai import OpenAI
-        import openai
+        prompt = f"Write a fantasy short story in 5 to 6 lines about this character:\n{character_data.data['details']}"
 
-        openai.api = open_api_key
-
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages =[{"role":"user","context":prompt}]
+        response = client.chat.completions.create(
+            model="llama3-70b-8192",
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.8,
         )
-         
-        story = response.choices[0].messages.content
-        return {"story":story} 
+
+        story = response.choices[0].message.content.strip() 
+        print(story, "llllllllllllllllllllllll")  
+
+        return {"story": story}
     
     except Exception as e:
-        raise HTTPException(status_code=500,detail=str(e))
+        print("Error in /generate_story:", e)
+        raise HTTPException(status_code=500, detail=str(e))
