@@ -2,6 +2,8 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import os
+from fastapi.responses import JSONResponse
+from fastapi import status
 from supabase import create_client
 from fastapi.middleware.cors import CORSMiddleware
 from groq import Groq  
@@ -44,14 +46,14 @@ def create_character(characters: Character):
             "name": characters.name,
             "details": characters.details
         }).execute()
-        return {"message": "Character added successfully", "data": response.data}
+        return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message": "Character added successfully", "data": response.data})
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/generate_story")
 def generate_story(payload: dict):
     try:
-        name = payload.get("charcter_name")  
+        name = payload.get("character_name")  
         character_data = supabase.table("characters").select("*").eq("name", name).single().execute()
 
         if not character_data.data:
